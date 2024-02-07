@@ -1,33 +1,83 @@
 #include "blog.h"
 
-#define HTTP_200_HEADER "HTTP/1.1 200 OK"
-#define HTTP_200_HEADER_LENGTH 15
+// Read a file (or a socket) safely** (after proper error handling is implemented)
+// Can optimize to avoid unnecessary realloc
+// reference: https://stackoverflow.com/a/44894946
+int read_file(FILE *fp, char **data_ptr, size_t *size_ptr) {
+    if (fp == NULL || data_ptr == NULL || size_ptr == NULL) {
+        return FILE_READ_INVALID;
+    }
 
-// HTTP headers
+    char *file_data = NULL;
+
+    size_t total_read = 0;
+    size_t buffer_size = 0;
+    size_t temp = 0;
+
+    while (true) {
+        if (READ_CHUNK_SIZE + total_read + 1 > buffer_size) {
+            // Buffer too small
+            // Reallocate additional READ_CHUNK_SIZE + 1 bytes
+            buffer_size += READ_CHUNK_SIZE + 1;
+            file_data = (char *) realloc(file_data, buffer_size);
+        }
+
+        temp = fread(file_data + total_read, 1, READ_CHUNK_SIZE, fp);
+        if (temp == 0) {
+            // Nothing was read
+            // We have reached EOF or something went wrong
+            break;
+        }
+
+        total_read += temp;
+    }
+
+    // Reallocate, null-terminate, assign
+    file_data = (char *) realloc(file_data, total_read + 1);
+    file_data[total_read] = '\0';
+    *data_ptr = file_data;
+
+    *size_ptr = total_read;
+
+    return FILE_READ_OK;
+}
+
+// Add 200 header (with newlines) to content
 char *add_200_header(char *body) {
-    char *header = (char *) malloc((HTTP_200_HEADER_LENGTH + 1) * sizeof(char));
+    char *header = (char *) malloc(HTTP_200_HEADER_LENGTH + 1);
     strcpy(header, HTTP_200_HEADER);
 
     // Append body to header
     size_t body_len = strlen(body);
-    char *output = (char *) malloc((HTTP_200_HEADER_LENGTH + body_len + 1) * sizeof(char));
+    char *output = (char *) malloc(HTTP_200_HEADER_LENGTH + body_len + 1);
     strcpy(output, header);
     strcat(output, body);
     
-    // Free memory
+    // Free allocated memory
     free(header);
+    
     return output;
 }
 
 int main(int argc, char **argv) {
-    // Five messages to prevent caching
-    char *messages[] = {
-        "\n\n<html><body><p>abcdef ghij klmn</p></body></html>",
-        "\n\n<html><body><p>normal text here</p></body></html>",
-        "\n\n<html><body><p>helpp im getting</p></body></html>",
-        "\n\n<html><body><p>123456 7890123 4</p></body></html>",
-        "\n\n<html><body><p>lorem ipsum dolo</p></body></html>"
-    };
+    if (argc != 2) {
+        printf("usage: %s <file_path>\n", argv[0]);
+        exit(0);
+    }
+
+    // Read content from file into file_data
+    char *file_data;
+    size_t data_length;
+
+    FILE *fp = fopen(argv[1], "r");
+    if (read_file(fp, &file_data, &data_length) != FILE_READ_OK) {
+        fprintf(stderr, "error reading file");
+        exit(1);
+    }
+    fclose(fp);
+
+    // Append header to file
+    file_data = add_200_header(file_data);
 
     int status;
     struct addrinfo hints;
@@ -67,9 +117,7 @@ int main(int argc, char **argv) {
             // Child process
             close(sock_fd);
 
-            char *message = add_200_header(messages[i % 5]);
-            int bytes_sent = send(new_fd, message, strlen(message), 0);
-
+            int bytes_sent = send(new_fd, file_data, data_length, 0);
             if (bytes_sent <= 0) {
                 perror("send");
                 exit(1);

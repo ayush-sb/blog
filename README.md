@@ -10,7 +10,6 @@ $ make && ./blog
 
 ### TODO
 
-- Get content from files
 - Find better way to send data
 - Improve error handling
 - Clean up makefile
