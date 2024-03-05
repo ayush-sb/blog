@@ -1,14 +1,8 @@
 CC = gcc
 DIR = src
-CFLAGS = -I./$(DIR)
-DEPS = $(DIR)/blog.h
 
-
-$(DIR)/%.o: ($DIR)/%.c $(DEPS)
-	$(CC) -c -o $@ $< $(CFLAGS)
-
-blogmake: $(DIR)/blog.o
-	$(CC) -o blog $(DIR)/blog.o
+blogmake: $(DIR)/blog.c $(DIR)/utils.c
+	$(CC) -o blog $(DIR)/blog.c $(DIR)/utils.c
 
 .PHONY: clean
 clean:
